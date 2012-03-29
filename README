@@ -5,11 +5,14 @@ make
 
 # == Test Instructions ==
 
-# Create a physical Volume on /dev/sdb
-pvcreate volume /dev/sdb
+# Create a physical Volume of 100M on /dev/sdb
+sudo pvcreate /dev/sdb --setphysicalvolumesize 100M -Z y
+
+# Create a Volume Group called 'volume'
+sudo vgcreate volume /dev/sdb
 
 # Create a volume called 'original'
-lvcreate -L8M -n original volume
+sudo lvcreate -L8M -n original volume
 
 # Write Zero's char(NULL) to the entire volume
 ./write.py /dev/volume/original 0 1000

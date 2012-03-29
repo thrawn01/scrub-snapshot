@@ -2,6 +2,7 @@
 
 import sys
 import time
+import os
 
 
 if __name__ == "__main__":
@@ -14,22 +15,15 @@ if __name__ == "__main__":
     value = sys.argv[2]
     count = int(sys.argv[3])
     data = "".join([chr(int(value)) for i in xrange(0, 4096)])
+    total = 0
 
-    print "Writing: %s" % data
-    print "Len: ", len(data)
-    print "Count: ", count
+    print "Writing: '%c'" % data[0]
 
     with open(sys.argv[1], 'a') as file:
+        os.lseek(file.fileno(), 0, os.SEEK_SET)
         for i in xrange(0, count):
-            if file.write(data) == 0:
-                #sys.stdout.write('E')
-                #sys.stdout.flush()
-                print "Error Writing block %i" % i
-                break
+            total = total + os.write(file.fileno(), data)
             file.flush()
-            #sys.stdout.write('.')
-            #sys.stdout.flush()
-            #time.sleep(1)
 
-    print "\n"
+    print "Wrote: ", total
 
