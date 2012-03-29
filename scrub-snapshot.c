@@ -167,6 +167,16 @@ merge_chunk (struct pstore         *ps,
   return write_n_bytes (ps->real_fd, ps->data_chunk, chunk_len);
 }
 
+/*void print_chunk(struct pstore *ps){
+    int index;
+    size_t chunk_len;
+
+    chunk_len = ps->hdr.chunk_size << SECTOR_SHIFT;
+    for(index=0; index < chunk_len; index++) {
+        fprint("%X", ps->meta_chunk[index]);
+    }
+}*/
+
 int
 main (int argc, char **argv)
 {
@@ -179,14 +189,14 @@ main (int argc, char **argv)
 
   exit_code = 1;
 
-  if (argc != 3)
+  if (argc != 2)
     {
-      fprintf (stderr, "Usage: %s <cow-device> <real-device>\n", argv[0]);
+      fprintf (stderr, "Usage: %s <cow-device>\n", argv[0]);
       goto error_out;
     }
 
   cow_device  = argv[1];
-  real_device = argv[2];
+  //real_device = argv[2];
 
   ps.cow_fd = open (cow_device, O_RDONLY);
   if (ps.cow_fd < 0)
@@ -238,13 +248,13 @@ main (int argc, char **argv)
 
   printf ("exceptions_per_area: %d\n", ps.exceptions_per_area);
 
-  ps.real_fd = open (real_device, O_WRONLY);
+  /*ps.real_fd = open (real_device, O_WRONLY);
   if (ps.real_fd < 0)
     {
       fprintf (stderr, "Error opening '%s' for writing: %s\n",
                real_device, strerror (errno));
       goto error_close_real;
-    }
+    }*/
 
   ps.meta_chunk = malloc (ps.hdr.chunk_size << SECTOR_SHIFT);
   if (ps.meta_chunk == NULL)
@@ -274,6 +284,7 @@ main (int argc, char **argv)
                    area, cow_device, strerror (errno));
           goto error_free_data;
         }
+      //print_chunk(&ps);
 
       exception = 0;
       while (exception < ps.exceptions_per_area)
@@ -292,12 +303,12 @@ main (int argc, char **argv)
           printf ("[area %d, exception %d] old: %lld, new: %lld\n",
                   area, exception, de.old_chunk, de.new_chunk);
 
-          if (merge_chunk (&ps, &de) == -1)
+          /*if (merge_chunk (&ps, &de) == -1)
             {
               fprintf (stderr, "Error merging chunk %lld from '%s' to chunk %lld on '%s': %s\n",
                        de.new_chunk, cow_device, de.old_chunk, real_device, strerror (errno));
               goto error_free_data;
-            }
+            }*/
 
           exception++;
         }
@@ -316,8 +327,8 @@ main (int argc, char **argv)
   free (ps.data_chunk);
 
  error_close_real:
-  close (ps.real_fd);
-  ps.real_fd = 0;
+  //close (ps.real_fd);
+  //ps.real_fd = 0;
 
  error_close_cow:
   close (ps.cow_fd);
