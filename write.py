@@ -19,7 +19,7 @@ if __name__ == "__main__":
     print "Len: ", len(data)
     print "Count: ", count
 
-    with open(sys.argv[1], 'w') as file:
+    with open(sys.argv[1], 'a') as file:
         for i in xrange(0, count):
             if file.write(data) == 0:
                 #sys.stdout.write('E')

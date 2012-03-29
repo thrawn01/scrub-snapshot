@@ -3,6 +3,23 @@ apt-get install cmake
 cmake .
 make
 
-# == Run instructions ==
+# == Test Instructions ==
+
+# Create a physical Volume on /dev/sdb
+pvcreate volume /dev/sdb
+
+# Create a volume called 'original'
+lvcreate -L8M -n original volume
+
+# Write Zero's char(NULL) to the entire volume
+./write.py /dev/volume/original 0 1000
+
+# Make a snapshot
+lvcreate -L8M -s -n backup /dev/volume/original
+
+# Write 65's char('A') to the first 2 sectors Sector = 4096 bytes
+./write.py /dev/volume/original 65 2
+
+# See what is in the COW
 ./scrub-snapshot /dev/mapper/lunr--volume-backup-cow
 
