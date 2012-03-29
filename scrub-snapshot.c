@@ -167,15 +167,16 @@ merge_chunk (struct pstore         *ps,
   return write_n_bytes (ps->real_fd, ps->data_chunk, chunk_len);
 }
 
-/*void print_chunk(struct pstore *ps){
+void print_chunk(struct pstore *ps){
     int index;
     size_t chunk_len;
 
     chunk_len = ps->hdr.chunk_size << SECTOR_SHIFT;
     for(index=0; index < chunk_len; index++) {
-        fprint("%X", ps->meta_chunk[index]);
+        printf("%x", ps->meta_chunk + index);
     }
-}*/
+    printf("\n\n\n");
+}
 
 int
 main (int argc, char **argv)
@@ -284,7 +285,6 @@ main (int argc, char **argv)
                    area, cow_device, strerror (errno));
           goto error_free_data;
         }
-      //print_chunk(&ps);
 
       exception = 0;
       while (exception < ps.exceptions_per_area)
@@ -296,12 +296,18 @@ main (int argc, char **argv)
 
           if (de.new_chunk == 0)
             {
+              printf("No more chunks in cow; quiting...\n");
               prev_area_was_full = 0;
               break;
             }
 
           printf ("[area %d, exception %d] old: %lld, new: %lld\n",
                   area, exception, de.old_chunk, de.new_chunk);
+
+          if (read_chunk (&ps, de.new_chunk, ps.data_chunk) == -1)
+            return -1;
+
+         print_chunk(&ps);
 
           /*if (merge_chunk (&ps, &de) == -1)
             {
