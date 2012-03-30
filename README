@@ -5,24 +5,46 @@ make
 
 # == Test Instructions ==
 
+# If clean up is needed from a previous test
+sudo lvremove /dev/volume/original -ff
+sudo pvremove /dev/sdb -ff
+
+# Write NULL's to the first 1G on the disk
+./write.py /dev/sdb 0 262144
+
 # Create a physical Volume of 100M on /dev/sdb
-sudo pvcreate /dev/sdb --setphysicalvolumesize 100M -Z y
+sudo pvcreate /dev/sdb --setphysicalvolumesize 1G
 
 # Create a Volume Group called 'volume'
 sudo vgcreate volume /dev/sdb
 
 # Create a volume called 'original'
-sudo lvcreate -L8M -n original volume
+sudo lvcreate -L200M -n original volume
 
-# Write Zero's char(NULL) to the entire volume
-./write.py /dev/volume/original 0 1000
+# Write 65's char(A) to the entire volume
+./write.py /dev/volume/original 65 51200
 
 # Make a snapshot
-lvcreate -L8M -s -n backup /dev/volume/original
+sudo lvcreate -L250M -s -n backup /dev/volume/original
 
-# Write 65's char('A') to the first 2 sectors Sector = 4096 bytes
-./write.py /dev/volume/original 65 2
+# Should both be the same
+md5sum /dev/volume/original
+md5sum /dev/volume/backup
+
+# Record
+md5sum /dev/mapper/volume-backup-cow
+# The Cow should only include the cow metadata
+./head.py /dev/mapper/volume-backup-cow 0 64000
+
+# Write 66's char('B') to the entire volume
+./write.py /dev/volume/original 66 51200
+
+# Should be different
+md5sum /dev/mapper/volume-backup-cow
 
 # See what is in the COW
-./scrub-snapshot /dev/mapper/lunr--volume-backup-cow
+./scrub-snapshot /dev/mapper/volume-backup-cow
+
+# Might be somthing in the cow? ( Should be a bunch of A's )
+./head.py /dev/mapper/volume-backup-cow 0 64000
 

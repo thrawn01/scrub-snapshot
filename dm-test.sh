@@ -1,13 +1,18 @@
 
+#dmsetup suspend "/dev/volume/original"
+#dmsetup suspend "/dev/volume/backup"
+#dmsetup resume "/dev/volume/original"
+#dmsetup resume "/dev/volume/backup"
+
 #DEVICE="/dev/mapper/lunr--volume-backup-cow"
 #DEVICE="/dev/mapper/lunr--volume-backup"
-DEVICE="/dev/mapper/lunr--volume-thrawn"
+#DEVICE="/dev/mapper/lunr--volume-thrawn"
 #dmsetup remove $DEVICE
 #exit 1
 
-dmsetup suspend $DEVICE
+#dmsetup suspend $DEVICE
 #dmsetup load $DEVICE --table "0 204800 error 8:16 18560"
-dmsetup resume $DEVICE
+#dmsetup resume $DEVICE
 
 #dmsetup info $DEVICE
 #dmsetup table $DEVICE

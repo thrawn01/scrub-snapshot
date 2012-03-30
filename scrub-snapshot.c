@@ -125,10 +125,7 @@ write_n_bytes (int      fd,
 }
 
 static int
-read_chunk (struct pstore *ps,
-            int            chunk_index,
-            void          *buf)
-{
+read_chunk (struct pstore *ps, int chunk_index, void *buf) {
   ssize_t chunk_len;
 
   chunk_len = ps->hdr.chunk_size << SECTOR_SHIFT;
@@ -171,11 +168,12 @@ void print_chunk(struct pstore *ps){
     int index;
     size_t chunk_len;
 
+    printf("--- Chunk ---\n");
     chunk_len = ps->hdr.chunk_size << SECTOR_SHIFT;
     for(index=0; index < chunk_len; index++) {
-        printf("%x", ps->meta_chunk + index);
+        printf("%c", ((int*)ps->data_chunk)[index]);
     }
-    printf("\n\n\n");
+    printf("\n-------------\n\n");
 }
 
 int
@@ -302,20 +300,13 @@ main (int argc, char **argv)
             }
 
           printf ("[area %d, exception %d] old: %lld, new: %lld\n",
-                  area, exception, de.old_chunk, de.new_chunk);
+                  area, exception, (long long int)de.old_chunk,
+                  (long long int)de.new_chunk);
 
           if (read_chunk (&ps, de.new_chunk, ps.data_chunk) == -1)
             return -1;
 
-         print_chunk(&ps);
-
-          /*if (merge_chunk (&ps, &de) == -1)
-            {
-              fprintf (stderr, "Error merging chunk %lld from '%s' to chunk %lld on '%s': %s\n",
-                       de.new_chunk, cow_device, de.old_chunk, real_device, strerror (errno));
-              goto error_free_data;
-            }*/
-
+          print_chunk(&ps);
           exception++;
         }
 
