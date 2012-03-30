@@ -9,23 +9,23 @@ make
 sudo lvremove /dev/volume/original -ff
 sudo pvremove /dev/sdb -ff
 
-# Write NULL's to the first 1G on the disk
-./write.py /dev/sdb 0 262144
+# Write NULL's to the first 13G on the disk
+./write.py /dev/sdb 0 3407872
 
-# Create a physical Volume of 100M on /dev/sdb
-sudo pvcreate /dev/sdb --setphysicalvolumesize 1G
+# Create a physical Volume of 12G on /dev/sdb
+sudo pvcreate /dev/sdb --setphysicalvolumesize 13G
 
 # Create a Volume Group called 'volume'
 sudo vgcreate volume /dev/sdb
 
 # Create a volume called 'original'
-sudo lvcreate -L200M -n original volume
+sudo lvcreate -L5G -n original volume
 
 # Write 65's char(A) to the entire volume
-./write.py /dev/volume/original 65 51200
+./write.py /dev/volume/original 65 1310720
 
 # Make a snapshot
-sudo lvcreate -L250M -s -n backup /dev/volume/original
+sudo lvcreate -L6G -s -n backup /dev/volume/original
 
 # Should both be the same
 md5sum /dev/volume/original
@@ -34,10 +34,10 @@ md5sum /dev/volume/backup
 # Record
 md5sum /dev/mapper/volume-backup-cow
 # The Cow should only include the cow metadata
-./head.py /dev/mapper/volume-backup-cow 0 64000
+./head.py /dev/mapper/volume-backup-cow 0 1310720
 
-# Write 66's char('B') to the entire volume
-./write.py /dev/volume/original 66 51200
+# Write 66's char('B') to the entire volume ( Except the last 4096 )
+./write.py /dev/volume/original 66 1310719
 
 # Should be different
 md5sum /dev/mapper/volume-backup-cow
@@ -46,5 +46,5 @@ md5sum /dev/mapper/volume-backup-cow
 ./scrub-snapshot /dev/mapper/volume-backup-cow
 
 # Might be somthing in the cow? ( Should be a bunch of A's )
-./head.py /dev/mapper/volume-backup-cow 0 64000
+./head.py /dev/mapper/volume-backup-cow 0 1310720
 
