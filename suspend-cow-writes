@@ -41,3 +41,13 @@ if __name__ == '__main__':
 
     run("lvdisplay %s" % os.path.join('/dev', volume_group, snapshot))
 
+    # Run the scrub operation
+    #run("scrub-snapshot %s" % os.path.join('/dev/mapper', cow + '-zero'))
+
+    # Remove the cow-zero
+    #run("sudo dmsetup remove -f %s" % (cow + '-zero'))
+
+    # Remove the snapshot
+    #run("lvremove %s -ff" % os.path.join('/dev', volume_group, snapshot))
+
+
