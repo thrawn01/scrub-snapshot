@@ -72,6 +72,7 @@ struct pstore
 
   void *meta_chunk;
   void *data_chunk;
+  void *scrub_buf;
 };
 
 static int
@@ -176,6 +177,18 @@ void print_chunk(struct pstore *ps){
     printf("\n-------------\n\n");
 }
 
+int scrub_chunk(struct pstore *ps, uint64_t chunk_index ){
+    size_t chunk_len;
+    uint64_t offset;
+
+    chunk_len = ps->hdr.chunk_size << SECTOR_SHIFT;
+    offset = chunk_len * chunk_index;
+    if (lseek (ps->cow_fd, offset, SEEK_SET) == -1)
+        return -1;
+    printf("--- Scrubing Offset: %llu Len: %d ---\n", (long long unsigned int)offset, (int)chunk_len);
+    return write_n_bytes (ps->cow_fd, ps->scrub_buf, chunk_len);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -197,7 +210,7 @@ main (int argc, char **argv)
   cow_device  = argv[1];
   //real_device = argv[2];
 
-  ps.cow_fd = open (cow_device, O_RDONLY);
+  ps.cow_fd = open (cow_device, O_RDWR);
   if (ps.cow_fd < 0)
     {
       fprintf (stderr, "Error opening '%s' for reading: %s\n",
@@ -221,6 +234,10 @@ main (int argc, char **argv)
   printf ("valid: %d\n",      ps.hdr.valid);
   printf ("version: %d\n",    ps.hdr.version);
   printf ("chunk_size: %d\n", ps.hdr.chunk_size);
+
+  // Init our scrub buffer
+  ps.scrub_buf = malloc (ps.hdr.chunk_size << SECTOR_SHIFT);
+  memset(ps.scrub_buf, 69, ps.hdr.chunk_size << SECTOR_SHIFT);
 
   if (ps.hdr.magic != SNAPSHOT_DISK_MAGIC)
     {
@@ -307,7 +324,9 @@ main (int argc, char **argv)
             return -1;
 
           print_chunk(&ps);
+          scrub_chunk(&ps, de.new_chunk);
           exception++;
+          return 0; // <-- Debug
         }
 
       area++;

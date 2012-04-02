@@ -1,0 +1,43 @@
+#! /usr/bin/env python
+
+from subprocess import check_output, call
+import os
+
+def run(cmd):
+    #print "-- %s" % cmd
+    #return
+    if call(cmd, shell=True):
+        print "Command '%s' returned non-zero exit status" % cmd
+        sys.exit(1)
+
+if __name__ == '__main__':
+
+    volume_group  = "volume"
+    origin = "original"
+    snapshot = "backup"
+    cow = "%s-%s-cow" % (volume_group, snapshot)
+
+    # make a copy of the cow device linear table mapping to raw block device
+    table = check_output("dmsetup table %s" % cow, shell=True).rstrip()
+
+    # create a new handle to the same blocks as in use by the cow
+    run("echo %s | dmsetup create %s" % (table, cow + '-zero'))
+
+    # suspend the cow (this will essentially suspend the origin)
+    run("dmsetup suspend %s" % cow)
+
+    # update the table for the cow device to always return io errors
+    # e.g. "0 204800 linear 8:16 4194688" => "0 204800 error"
+    parts = table.split()
+    table = "%s %s %s" % (parts[0], parts[1], 'error')
+    run("echo %s | dmsetup reload %s" % (table, cow))
+
+    # resume the cow to let writes start happening back on the origin
+    run("dmsetup resume %s" % cow)
+
+    # perform some io onto the snap1shot volume to make lvm inactive(ate) the snapshot
+    # any io onto the origin will also break inactivate the lvm snap1shot for us
+    #dd bs=4kB count=1024 if=/dev/zero of=/dev/mapper/myvg-snap1
+
+    run("lvdisplay %s" % os.path.join('/dev', volume_group, snapshot))
+
