@@ -28,6 +28,7 @@ def write(fd, offset, buf):
     except (OSError, IOError), e:
         raise ScrubError("Write Failed with: %s" % e)
 
+
 def read(fd, offset, length):
     try:
         # Seek to the offset
@@ -41,7 +42,7 @@ def read(fd, offset, length):
 def read_exception_metadata(fd, chunk_size, index):
     # exception = { uint64 old_chunk, uint64 new_chunkc }
     # if the size of each exception metadata is 16 bytes,
-    # how many exceptions can fit in one chunk
+    # exceptions_per_chunk is how many exceptions can fit in one chunk
     exceptions_per_chunk = chunk_size / 16
     # Offset where the exception metadata store begins
     store_offset = 1 + ((exceptions_per_chunk + 1) * index)
@@ -52,7 +53,7 @@ def read_exception_metadata(fd, chunk_size, index):
     while True:
         # Unpack 1 exception metatdata from the store
         (old_chunk, new_chunk) = unpack_from('<QQ', store, exception * 16)
-        # Yields the offset where the exception exists in the cow linear device
+        # Yields the offset where the exception exists in the cow
         yield new_chunk * chunk_size
         # Increment to the next exception in the metatdata store
         exception = exception + 1
@@ -82,7 +83,8 @@ def read_header(fd):
         return 1
 
     header = list(header)
-    # Chunk size in 512 bytes ( 0 << SECTOR_SHIFT == 512 )
+    # Chunk size is byte aligned to 512 bytes
+    # (0 << SECTOR_SHIFT) == 512
     header[3] = header[3] << SECTOR_SHIFT
     return header
 
@@ -108,7 +110,7 @@ def scrub(cow, options):
     # Create a buffer of nulls the size of the chunk
     scrub_buf = '\0' * header[3]
 
-    store, count = (0,0)
+    store, count = (0, 0)
     while True:
         # Iterate through all the exceptions
         for offset in read_exception_metadata(fd, header[3], store):
@@ -137,7 +139,7 @@ def prepare_cow(cow, verbose):
         return
 
     try:
-        # make a copy of the cow device linear table mapping to raw block device
+        # copy the cow device linear table mapping
         cow_table = check_output("dmsetup table %s" % cow, shell=True).rstrip()
     except CalledProcessError, e:
         raise ScrubError("dmsetup failed '%s'; not running as root?" % e)
@@ -154,7 +156,6 @@ def prepare_cow(cow, verbose):
         parts = cow_table.split()
         error_table = "%s %s %s" % (parts[0], parts[1], 'error')
         run("echo '%s' | dmsetup reload %s" % (error_table, cow), verbose)
-        return cow + '-zero'
     except ScrubError, e:
         # If somthing went wrong, remove the cow-zero volume
         run("dmsetup remove %s" % (cow + '-zero'), verbose)
@@ -198,7 +199,7 @@ if __name__ == "__main__":
     parser.add_option('-v', '--verbose', action='count',
             help="Be verbose, -vv is very verbose")
     parser.add_option('-d', '--display-only', const=True, action='store_const',
-            help="Do not scrub the cow, just display cow stats and exit, implies -v")
+            help="Do not scrub the cow, display cow stats & exit; implies -v")
     parser.add_option('-s', '--skip-remove', const=True, action='store_const',
             help="Do not remove the snapshot after scrubbing")
     options, args = parser.parse_args()
