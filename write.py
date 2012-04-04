@@ -29,7 +29,7 @@ def direct(data):
     mem.write(data)
 
     # Open the file for direct access
-    fd = os.open(sys.argv[1], os.O_DIRECT | os.O_RDWR | os.O_SYNC)
+    fd = os.open(sys.argv[1], os.O_DIRECT | os.O_WRONLY)
     # Seek to the begining of the file (or block device)
     os.lseek(fd, 0, os.SEEK_SET)
 
