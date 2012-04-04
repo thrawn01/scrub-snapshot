@@ -50,7 +50,7 @@ def read_exception_metadata(fd, chunk_size, index):
     # and read the entire store
     store = read(fd, chunk_size * store_offset, chunk_size)
     exception = 0
-    while True:
+    while exception < exceptions_per_chunk:
         # Unpack 1 exception metatdata from the store
         (old_chunk, new_chunk) = unpack_from('<QQ', store, exception * 16)
         # Yields the offset where the exception exists in the cow
