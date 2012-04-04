@@ -185,7 +185,7 @@ def remove_snapshot(snapshot, options):
     scrub(cow, options)
 
     if not options.display_only or options.skip_remove:
-        print "-- Removing snapshot"
+        print "-- Removing snapshot '%s'" % snapshot
         # Remove the cow-zero
         run("dmsetup remove -f %s" % cow_device + '-zero', options.verbose)
         # Remove the snapshot
