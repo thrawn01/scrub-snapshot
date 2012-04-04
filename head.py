@@ -4,6 +4,7 @@ import sys
 import time
 import os
 import mmap
+from directio import DirectFile
 
 
 def buffered(offset, count):
@@ -17,6 +18,18 @@ def buffered(offset, count):
 
 
 def direct(offset, count):
+    total = 0
+    file = DirectFile(sys.argv[1])
+    for i in xrange(0, count):
+        input = file.pread(4096, offset)
+        total = total + os.write(sys.stdout.fileno(), input)
+
+    # Close the file
+    file.close()
+    return total
+
+
+def direct_map(offset, count):
     # Open the file for direct access
     fd = os.open(sys.argv[1], os.O_DIRECT | os.O_RDWR)
 
@@ -32,6 +45,7 @@ def direct(offset, count):
     os.close(fd)
     return total
 
+
 if __name__ == "__main__":
 
     if len(sys.argv) < 3:
@@ -43,9 +57,13 @@ if __name__ == "__main__":
     count = int(sys.argv[3])
     print "Offset: ", offset
 
+    if len(sys.argv) == 5 and sys.argv[4] == 'direct_map':
+        os.write(sys.stdout.fileno(), "\n(Direct Map) Read: %d\n" % direct_map(offset, count))
+        sys.exit(0)
+
     if len(sys.argv) == 5 and sys.argv[4] == 'direct':
         os.write(sys.stdout.fileno(), "\n(Direct) Read: %d\n" % direct(offset, count))
         sys.exit(0)
 
-    os.write(sys.stdout.fileno(), "\n(Bufferd) Read: %d\n" % buffered(offset, count))
+    os.write(sys.stdout.fileno(), "\n(Buffered) Read: %d\n" % buffered(offset, count))
     sys.exit(0)
