@@ -3,9 +3,11 @@
 # If clean up is needed from a previous test
 sudo lvremove /dev/volume/original -ff
 sudo pvremove /dev/sdb -ff
+# ----------
+
 
 # Write NULL's to the first 100M on the disk
-./write.py /dev/sdb 0 25600
+sudo ./write.py /dev/sdb 0 25600
 
 # Create a physical Volume of 100M on /dev/sdb
 sudo pvcreate /dev/sdb --setphysicalvolumesize 100M
@@ -17,33 +19,19 @@ sudo vgcreate volume /dev/sdb
 sudo lvcreate -L8M -n original volume
 
 # Write 65's char(A) to the entire volume
-./write.py /dev/volume/original 65 2048
+sudo ./write.py /dev/volume/original 65 2048
 
 # Make a snapshot
 sudo lvcreate -L8M -s -n backup /dev/volume/original
 
-# Should both be the same
-md5sum /dev/volume/original
-md5sum /dev/volume/backup
-
-# Record the md5
-md5sum /dev/mapper/volume-backup-cow
-
-# The Cow should only include the cow metadata 
-# (the rest of the disk should be NULL)
-./head.py /dev/mapper/volume-backup-cow 0 2048
-
 # Write 66's char('B') to the first 5 sectors using direct IO
 # Avoid using buffered IO, or the data will not show in the cow imediatly
-./write.py /dev/volume/original 66 5 direct
-
-# Should be different
-md5sum /dev/mapper/volume-backup-cow
+sudo ./write.py /dev/volume/original 66 5 direct
 
 # See what is in the COW (Should be 5 exceptions in the cow)
 # -d skips the scrub, and simply counts the exceptions
-./scrub-snapshot.py /dev/volume/backup -d -vv
+sudo ./scrub-snapshot.py /dev/volume/backup -d -vv
 
 # Scrub the snapshot
-./scrub-snapshot.py /dev/volume/backup -v
+sudo ./scrub-snapshot.py /dev/volume/backup -v
 
