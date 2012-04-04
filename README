@@ -7,7 +7,7 @@ sudo pvremove /dev/sdb -ff
 
 
 # Write NULL's to the first 100M on the disk
-sudo ./write.py /dev/sdb 0 25600
+sudo ./write.py /dev/sdb 0 25600 direct
 
 # Create a physical Volume of 100M on /dev/sdb
 sudo pvcreate /dev/sdb --setphysicalvolumesize 100M
@@ -19,7 +19,7 @@ sudo vgcreate volume /dev/sdb
 sudo lvcreate -L8M -n original volume
 
 # Write 65's char(A) to the entire volume
-sudo ./write.py /dev/volume/original 65 2048
+sudo ./write.py /dev/volume/original 65 2048 direct
 
 # Make a snapshot
 sudo lvcreate -L8M -s -n backup /dev/volume/original
