@@ -34,6 +34,7 @@ class RawDirect(RawIOBase):
         if result < 0:
             errno = get_errno()
             raise OSError(errno, os.strerror(errno))
+        return result
 
     def _write(self, buf):
         memmove(self.buf, c_char_p(buf), self.block_size)
@@ -42,10 +43,10 @@ class RawDirect(RawIOBase):
     def write(self, buf):
         if len(buf) == self.block_size:
             return self._write(buf)
-        raise RuntimeError("Not Implemented Yet, Wrong length")
 
         offset, total = 0, 0
         write_count, remainder = 0, len(buf)
+
         # the buf is greater than the block size
         if len(buf) > self.block_size:
             write_count, remainder = divmod(len(buf), self.block_size)
@@ -65,17 +66,16 @@ class RawDirect(RawIOBase):
         total += self._write(read_buf)
 
     def _read(self):
-        self._cread(self.fd, self.buf, self.block_size)
-        return string_at(self.buf, self.block_size)
+        length = self._cread(self.fd, self.buf, self.block_size)
+        return string_at(self.buf, length)
 
     def read(self, length=None):
-        # If length is -1 or None, call readall()
-        #if length == -1 or length == None:
-            #return self.readall()
+        # If length is -1 or None, call self.readall()
+        if length == -1 or length == None:
+            return self.readall()
 
         if length == self.block_size:
             return self._read()
-        raise RuntimeError("Not Implemented Yet, Wrong length")
 
         read_count, remainder = 0, length
         # the read length is greater than the block size
@@ -98,6 +98,10 @@ class RawDirect(RawIOBase):
     def close(self):
         # TODO: Free the memalign buffer (self.buf)
         return os.close(self.fd)
+
+    def readall(self):
+        raise RuntimeError(
+            "readall() Un-implemented, you must specify a length")
 
 
 if __name__ == "__main__":

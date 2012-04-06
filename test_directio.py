@@ -32,4 +32,17 @@ class TestRawDirect(unittest.TestCase):
         self.assertEquals(raw.read(512), 'B' * 512)
         raw.close()
 
+    def test_direct_read_past_eof(self):
+        # Create a file that is less than the block size
+        fd, file = tempfile.mkstemp(dir='/tmp')
+        os.write(fd, 'A' * 511)
+        os.close(fd)
+
+        raw = RawDirect(file, block_size=512)
+        # If requested read is past the EOF
+        # return the bytes we actually read
+        self.assertEquals(raw.read(512), ('A' * 511))
+        # Empty string means we are at EOF
+        self.assertEquals(raw.read(512), '')
+
 
