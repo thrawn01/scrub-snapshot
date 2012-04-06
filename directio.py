@@ -26,6 +26,8 @@ class RawDirect(RawIOBase):
         self._cwrite.argtypes = [c_int, c_void_p, c_size_t]
         self._cwrite.errcheck = self.error_check
 
+        # NOT thread safe, DO NOT USE RawDirect as a singleton!
+        # IE: Don't replace sys.stdout with it!
         self.buf = c_void_p()
         self._memalign(byref(self.buf), self.block_size, self.block_size)
 
@@ -57,13 +59,16 @@ class RawDirect(RawIOBase):
             total = self._write(buf[offset:offset + self.block_size])
 
         # Read in the a block
-        read_len = self._read(self.fd, read_buf, self.block_size)
-        # Overlay the bytes
-        read_buf.splice(0, buf[offset:remainder], remainder)
+        read_buf = self._read()
+        # Overlay the bytes to be written in the block
+        read_buf = buf[offset:remainder] + read_buf[remainder:]
+        assert(len(read_buf) == self.block_size)
         # Seek back to the position we started the read from
-        _lseek(self.fd, read_len * -1, os.SEEK_CUR)
+        os.lseek(self.fd, self.block_size * -1, os.SEEK_CUR)
         # Write out the read_buf
-        total += self._write(read_buf)
+        self._write(read_buf)
+        total += remainder
+        return total
 
     def _read(self):
         length = self._cread(self.fd, self.buf, self.block_size)
@@ -77,7 +82,7 @@ class RawDirect(RawIOBase):
         if length == self.block_size:
             return self._read()
 
-        read_count, remainder = 0, length
+        read_count, remainder, result = 0, length, []
         # the read length is greater than the block size
         if length > self.block_size:
             read_count, remainder = divmod(length, self.block_size)
@@ -86,14 +91,13 @@ class RawDirect(RawIOBase):
         for i in xrange(0, read_count):
             buf = self._read()
             result.append(buf)
-            total += len(buf)
 
         # Read in an entire block
         buf = self._read()
         # Grab only the remainder of the requested read
         result.append(buf[0:remainder])
 
-        return result.join()
+        return ''.join(result)
 
     def close(self):
         # TODO: Free the memalign buffer (self.buf)
