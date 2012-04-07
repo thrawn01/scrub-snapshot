@@ -74,8 +74,7 @@ class RawDirect(RawIOBase):
         os.lseek(self._fd, self._block_size * -1, os.SEEK_CUR)
         # Write out the read_buf
         self._write(read_buf)
-        total += remainder
-        return total
+        return total + remainder
 
     def _read(self):
         length = self._cread(self._fd, self._buf, self._block_size)
@@ -124,6 +123,32 @@ class RawDirect(RawIOBase):
         length = self._cread(self._fd, self._buf, self._block_size)
         buf[0:len(buf)] = string_at(self._buf, length)
         return length
+
+    def fileno(self):
+        return self._fd
+
+    def flush(self):
+        pass
+
+    def isatty(self):
+        return False
+
+    def readable(self):
+        if not self._closed:
+            return True
+        return False
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        if not self._closed:
+            return os.lseek(self._fd, 0, os.SEEK_CUR)
+        return 0
+
+    def truncate(self, size=None):
+        return os.ftruncate(self._fd, size)
+
 
 if __name__ == "__main__":
     file = DirectFile("/dev/volume/original")

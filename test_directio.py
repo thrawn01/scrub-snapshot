@@ -161,3 +161,24 @@ class TestRawDirect(unittest.TestCase):
         self.assertEquals(raw.closed, False)
         raw.close()
         self.assertEquals(raw.closed, True)
+
+    def test_truncate(self):
+        # Our test file should be 1MB
+        self.assertEquals(os.stat(self.file).st_size, 1048576)
+
+        raw = RawDirect(self.file, block_size=512)
+        raw.truncate(512)
+        raw.close()
+        self.assertEquals(os.stat(self.file).st_size, 512)
+
+    @unittest.skip("Broken")
+    def test_tell(self):
+        raw = RawDirect(self.file, block_size=512)
+        #raw.write("O_DIRECT was probably designed by a deranged"\
+            #"monkey on some serious mind-controlling substances. -- Linus")
+        raw.write("AAAAA")
+        self.assertEquals(raw.tell(), 5)
+        raw.write("BBBBB")
+        self.assertEquals(raw.tell(), 10)
+        raw.seek(0)
+        self.assertEquals(raw.read(10), "AAAAABBBBB")
