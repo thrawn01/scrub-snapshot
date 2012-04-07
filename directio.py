@@ -12,8 +12,9 @@ libc = CDLL(util.find_library('c'), use_errno=True)
 class RawDirect(RawIOBase):
 
     def __init__(self, path, block_size=4096):
-        self.fd = os.open(path, os.O_DIRECT | os.O_RDWR)
-        self.block_size = block_size
+        self._fd = os.open(path, os.O_DIRECT | os.O_RDWR)
+        self._block_size = block_size
+        self._closed = False
 
         # Tell python about our libc calls
         self._memalign = libc.posix_memalign
@@ -28,8 +29,14 @@ class RawDirect(RawIOBase):
 
         # NOT thread safe, DO NOT USE RawDirect as a singleton!
         # IE: Don't replace sys.stdout with it!
-        self.buf = c_void_p()
-        self._memalign(byref(self.buf), self.block_size, self.block_size)
+        self._buf = c_void_p()
+        self._memalign(byref(self._buf), self._block_size, self._block_size)
+
+    def get_closed(self):
+        return self._closed
+
+    closed = property(get_closed, None, None,
+            "Returns True if the file handle is closed")
 
     @staticmethod
     def error_check(result, func, args):
@@ -39,53 +46,53 @@ class RawDirect(RawIOBase):
         return result
 
     def _write(self, buf):
-        memmove(self.buf, c_char_p(buf), self.block_size)
-        return self._cwrite(self.fd, self.buf, self.block_size)
+        memmove(self._buf, c_char_p(buf), self._block_size)
+        return self._cwrite(self._fd, self._buf, self._block_size)
 
     def write(self, buf):
-        if len(buf) == self.block_size:
+        if len(buf) == self._block_size:
             return self._write(buf)
 
         offset, total = 0, 0
         write_count, remainder = 0, len(buf)
 
         # the buf is greater than the block size
-        if len(buf) > self.block_size:
-            write_count, remainder = divmod(len(buf), self.block_size)
+        if len(buf) > self._block_size:
+            write_count, remainder = divmod(len(buf), self._block_size)
 
         # Write the buf 1 block at a time
         for i in xrange(0, write_count):
-            offset = i * self.block_size
-            total = self._write(buf[offset:offset + self.block_size])
+            offset = i * self._block_size
+            total = self._write(buf[offset:offset + self._block_size])
 
         # Read in the a block
         read_buf = self._read()
         # Overlay the bytes to be written in the block
         read_buf = buf[offset:remainder] + read_buf[remainder:]
-        assert(len(read_buf) == self.block_size)
+        assert(len(read_buf) == self._block_size)
         # Seek back to the position we started the read from
-        os.lseek(self.fd, self.block_size * -1, os.SEEK_CUR)
+        os.lseek(self._fd, self._block_size * -1, os.SEEK_CUR)
         # Write out the read_buf
         self._write(read_buf)
         total += remainder
         return total
 
     def _read(self):
-        length = self._cread(self.fd, self.buf, self.block_size)
-        return string_at(self.buf, length)
+        length = self._cread(self._fd, self._buf, self._block_size)
+        return string_at(self._buf, length)
 
     def read(self, length=None):
         # If length is -1 or None, call self.readall()
         if length == -1 or length == None:
             return self.readall()
 
-        if length == self.block_size:
+        if length == self._block_size:
             return self._read()
 
         read_count, remainder, result = 0, length, []
         # the read length is greater than the block size
-        if length > self.block_size:
-            read_count, remainder = divmod(length, self.block_size)
+        if length > self._block_size:
+            read_count, remainder = divmod(length, self._block_size)
 
         # read 1 block at a time
         for i in xrange(0, read_count):
@@ -100,13 +107,23 @@ class RawDirect(RawIOBase):
         return ''.join(result)
 
     def close(self):
-        # TODO: Free the memalign buffer (self.buf)
-        return os.close(self.fd)
+        # TODO: Free the memalign buffer (self._buf)
+        self._closed = True
+        return os.close(self._fd)
 
     def readall(self):
-        raise RuntimeError(
-            "readall() Un-implemented, you must specify a length")
+        result = []
+        while True:
+            buf = self.read(self._block_size)
+            if len(buf) == 0:
+                break
+            result.append(buf)
+        return ''.join(result)
 
+    def readinto(self, buf):
+        length = self._cread(self._fd, self._buf, self._block_size)
+        buf[0:len(buf)] = string_at(self._buf, length)
+        return length
 
 if __name__ == "__main__":
     file = DirectFile("/dev/volume/original")

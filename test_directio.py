@@ -73,6 +73,23 @@ class TestRawDirect(unittest.TestCase):
         self.assertEquals(raw.read(520), 'J' * 520)
         raw.close()
 
+    def test_readall(self):
+        raw = RawDirect(self.file, block_size=512)
+        # Read in the entire 1MB file
+        buf = raw.readall()
+        self.assertEquals(len(buf), 1048576)
+        raw.close()
+
+    def test_readinto(self):
+        with open(self.file, 'w') as file:
+            file.write('A' * 512)
+
+        raw = RawDirect(self.file, block_size=512)
+        buf = bytearray(512)
+        self.assertEquals(raw.readinto(buf), 512)
+        self.assertEquals(buf, 'A' * 512)
+        raw.close()
+
     def test_write(self):
         raw = RawDirect(self.file, block_size=512)
         raw.write('A' * 512)
@@ -137,3 +154,10 @@ class TestRawDirect(unittest.TestCase):
             # Should contain the 10 G's
             # the rest of the file should be NULLS
             self.assertEquals(fd.read(522), ('J' * 520) + '\0\0')
+
+    def test_closed(self):
+        raw = RawDirect(self.file, block_size=512)
+        # Write only 8 bytes more than the block size
+        self.assertEquals(raw.closed, False)
+        raw.close()
+        self.assertEquals(raw.closed, True)
