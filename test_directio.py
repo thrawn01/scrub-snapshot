@@ -6,10 +6,13 @@ import unittest
 import tempfile
 import os
 
+
 def find_loopback_device():
     for i in range(0, 7):
-        if call("losetup /dev/loop%d 2> /dev/null" % i, shell=True):
+        if call("losetup /dev/loop%d 2> /dev/null > /dev/null"
+                % i, shell=True):
             return '/dev/loop%d' % i
+
 
 def cannot_create_loopback():
     device = find_loopback_device()
@@ -22,6 +25,7 @@ def cannot_create_loopback():
     if stats.st_uid == os.getuid():
         return False
     return True
+
 
 class TestRawDirect(unittest.TestCase):
 
@@ -61,7 +65,7 @@ class TestRawDirect(unittest.TestCase):
 
         raw = RawDirect(self.file, block_size=512)
         # Ask to only read 10 bytes
-        self.assertEquals(raw.read(10), 'G' * 10)
+        self.assertRaises(OSError, raw.read, 10)
         raw.close()
 
     def test_read_greater_than_block_size(self):
@@ -70,7 +74,7 @@ class TestRawDirect(unittest.TestCase):
 
         raw = RawDirect(self.file, block_size=512)
         # Ask to read 8 more bytes then the block size
-        self.assertEquals(raw.read(520), 'J' * 520)
+        self.assertRaises(OSError, raw.read, 520)
         raw.close()
 
     def test_readall(self):
@@ -124,7 +128,7 @@ class TestRawDirect(unittest.TestCase):
         fd, file = tempfile.mkstemp(dir='/tmp')
         os.ftruncate(fd, 511)
         os.close(fd)
-        # Should be 511 in size 
+        # Should be 511 in size
         self.assertEquals(os.stat(file).st_size, 511)
 
         raw = RawDirect(file, block_size=512)
@@ -138,28 +142,17 @@ class TestRawDirect(unittest.TestCase):
     def test_write_less_than_block_size(self):
         raw = RawDirect(self.file, block_size=512)
         # Write only 10 bytes
-        self.assertEquals(raw.write('G' * 10), 10)
+        self.assertRaises(OSError, raw.write, ('G' * 10))
         raw.close()
-
-        with open(self.file) as fd:
-            # Should contain the 10 G's
-            # the rest of the file should be NULLS
-            self.assertEquals(fd.read(12), ('G' * 10) + '\0\0')
 
     def test_write_greater_than_block_size(self):
         raw = RawDirect(self.file, block_size=512)
         # Write only 8 bytes more than the block size
-        self.assertEquals(raw.write('J' * 520), 520)
+        self.assertRaises(OSError, raw.write, ('J' * 520))
         raw.close()
-
-        with open(self.file) as fd:
-            # Should contain the 10 G's
-            # the rest of the file should be NULLS
-            self.assertEquals(fd.read(522), ('J' * 520) + '\0\0')
 
     def test_closed(self):
         raw = RawDirect(self.file, block_size=512)
-        # Write only 8 bytes more than the block size
         self.assertEquals(raw.closed, False)
         raw.close()
         self.assertEquals(raw.closed, True)
@@ -173,13 +166,19 @@ class TestRawDirect(unittest.TestCase):
         raw.close()
         self.assertEquals(os.stat(self.file).st_size, 512)
 
+    def test_seek(self):
+        raw = RawDirect(self.file, block_size=512)
+        self.assertEquals(raw.seek(4096, os.SEEK_SET), 4096)
+        self.assertEquals(raw.seek(-512, os.SEEK_CUR), 3584)
+        # TODO: Test SEEK_END
+
     def test_tell(self):
         raw = RawDirect(self.file, block_size=512)
-        #raw.write("O_DIRECT was probably designed by a deranged"\
-            #"monkey on some serious mind-controlling substances. -- Linus")
-        raw.write("AAAAA")
-        self.assertEquals(raw.tell(), 5)
-        raw.write("BBBBB")
-        self.assertEquals(raw.tell(), 10)
+        raw.write('A' * 512)
+        self.assertEquals(raw.tell(), 512)
+        raw.write('B' * 512)
+        self.assertEquals(raw.tell(), 1024)
         raw.seek(0)
-        self.assertEquals(raw.read(10), "AAAAABBBBB")
+        self.assertEquals(raw.read(512), ('A' * 512))
+        self.assertEquals(raw.read(512), ('B' * 512))
+        self.assertEquals(raw.tell(), 1024)
