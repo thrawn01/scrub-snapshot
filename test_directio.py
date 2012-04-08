@@ -113,6 +113,8 @@ class TestRawDirect(unittest.TestCase):
             raw = RawDirect(device, block_size=512)
             # Should raise IOError: [Errno 28] No space left on device
             self.assertRaises(OSError, raw.write, 'A' * 512)
+            self.assertEquals(raw.tell(), 0)
+            self.assertEquals(os.lseek(raw._fd, 0, os.SEEK_CUR), 0)
             raw.close()
         finally:
             call("losetup -d %s" % device, shell=True)
@@ -171,7 +173,6 @@ class TestRawDirect(unittest.TestCase):
         raw.close()
         self.assertEquals(os.stat(self.file).st_size, 512)
 
-    @unittest.skip("Broken")
     def test_tell(self):
         raw = RawDirect(self.file, block_size=512)
         #raw.write("O_DIRECT was probably designed by a deranged"\
