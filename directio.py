@@ -52,7 +52,8 @@ class RawDirect(io.RawIOBase):
         # NOT thread safe, DO NOT USE RawDirect as a singleton!
         # IE: Don't replace sys.stdout with it!
         self._buf = c_void_p()
-        self._memalign(byref(self._buf), self._block_size, self._block_size)
+        self._memalign(byref(self._buf),
+                self._byte_alignment, self._block_size)
 
     def _get_closed(self):
         return self._closed

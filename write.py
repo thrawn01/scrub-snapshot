@@ -1,9 +1,11 @@
 #! /usr/bin/env python
 
+import directio
 import mmap
 import sys
 import time
 import os
+
 
 def buffered(data):
     total = 0
@@ -16,13 +18,13 @@ def buffered(data):
 
 
 def direct(data):
-    # system call write() when used with O_DIRECT requires 
+    # system call write() when used with O_DIRECT requires
     # the buffer passed to be 512 byte aligned in length
-    # Attempting to write 'data' string directly will result in 
+    # Attempting to write 'data' string directly will result in
     # OSError: [Errno 22] Invalid argument
 
     # Len of 'data' should be 4k, which is 512 aligned
-    # passing -1 to mmap maps the object to a memory 
+    # passing -1 to mmap maps the object to a memory
     # location instead of a file
     mem = mmap.mmap(-1, len(data))
     # Write the data into our reserved memory buffer
@@ -42,6 +44,14 @@ def direct(data):
     return total
 
 
+def direct_io(data):
+    with directio.open(sys.argv[1], buffered=4096) as fd:
+        total = 0
+        for i in xrange(0, count):
+            total = total + fd.write(data)
+    return total
+
+
 if __name__ == "__main__":
 
     if len(sys.argv) < 3:
@@ -54,11 +64,12 @@ if __name__ == "__main__":
     data = "".join([chr(int(value)) for i in xrange(0, 4096)])
 
     print "Writing: '%c'" % data[0]
+    if len(sys.argv) == 5 and sys.argv[4] == 'directio':
+        print "(DirectIO) Wrote: ", direct_io(data)
+        sys.exit(0)
     if len(sys.argv) == 5 and sys.argv[4] == 'direct':
         print "(Direct) Wrote: ", direct(data)
         sys.exit(0)
 
     print "(Buffered) Wrote: ", buffered(data)
     sys.exit(0)
-
-
