@@ -1,6 +1,8 @@
 #! /usr/bin/env python
 
+from io import UnsupportedOperation
 from directio import RawDirect
+import directio
 from subprocess import call
 import unittest
 import tempfile
@@ -61,11 +63,16 @@ class TestRawDirect(unittest.TestCase):
 
     def test_read_less_than_block_size(self):
         with open(self.file, 'w') as file:
-            file.write('G' * 512)
+            file.write('F' * 512)
+            file.write('B' * 1024)
 
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file, block_size=4096)
         # Ask to only read 10 bytes
         self.assertRaises(OSError, raw.read, 10)
+        # Read 512 bytes
+        self.assertEquals(raw.read(512), 'F' * 512)
+        # Read 1024
+        self.assertEquals(raw.read(1024), 'B' * 1024)
         raw.close()
 
     def test_read_greater_than_block_size(self):
@@ -140,9 +147,17 @@ class TestRawDirect(unittest.TestCase):
         self.assertEquals(os.stat(file).st_size, 512)
 
     def test_write_less_than_block_size(self):
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file, block_size=4096)
         # Write only 10 bytes
         self.assertRaises(OSError, raw.write, ('G' * 10))
+        # Write 512
+        self.assertEquals(raw.write('A' * 512), 512)
+        # Write 1024
+        self.assertEquals(raw.write('B' * 1024), 1024)
+        # Ensure the data is there
+        raw.seek(0)
+        self.assertEquals(raw.read(512), 'A' * 512)
+        self.assertEquals(raw.read(1024), 'B' * 1024)
         raw.close()
 
     def test_write_greater_than_block_size(self):
@@ -154,8 +169,10 @@ class TestRawDirect(unittest.TestCase):
     def test_closed(self):
         raw = RawDirect(self.file, block_size=512)
         self.assertEquals(raw.closed, False)
+        self.assertEquals(raw.writable(), True)
         raw.close()
         self.assertEquals(raw.closed, True)
+        self.assertEquals(raw.writable(), False)
 
     def test_truncate(self):
         # Our test file should be 1MB
@@ -182,3 +199,52 @@ class TestRawDirect(unittest.TestCase):
         self.assertEquals(raw.read(512), ('A' * 512))
         self.assertEquals(raw.read(512), ('B' * 512))
         self.assertEquals(raw.tell(), 1024)
+
+
+class TestBufferedDirect(unittest.TestCase):
+
+    def setUp(self):
+        fd, self.file = tempfile.mkstemp(dir='/tmp')
+        os.write(fd, '\0' * 1048576)
+        os.close(fd)
+
+    def tearDown(self):
+        os.unlink(self.file)
+
+    def test_open_with(self):
+        # BufferedIOBase gives us a context manager for free!
+        with directio.open(self.file) as fd:
+            self.assertEquals(fd.write('A' * 512), 512)
+            fd.seek(0)
+            self.assertEquals(fd.read(512), 'A' * 512)
+
+    def test_open_read_only(self):
+        fd = directio.open(self.file, 'r')
+        self.assertRaises(UnsupportedOperation, fd.write, ('\0' * 512))
+        fd.seek(0)
+        self.assertEquals(fd.read(512), '\0' * 512)
+        fd.close()
+
+    def test_open_write_only(self):
+        fd = directio.open(self.file, 'w')
+        self.assertEquals(fd.write('A' * 512), 512)
+        fd.seek(0)
+        self.assertRaises(UnsupportedOperation, fd.read, 512)
+        fd.close()
+
+    def test_buffered_write(self):
+        fd = directio.open(self.file)
+        fd.write('A' * 512)
+        fd.write('B' * 512)
+        fd.write('C' * 512)
+        fd.write('D' * 512)
+        fd.write('E' * 512)
+        fd.seek(-512, os.SEEK_CUR)
+        self.assertEquals(fd.read(512), 'E' * 512)
+        fd.close()
+
+        fd = directio.open(self.file)
+        self.assertEquals(fd.read(512), 'A' * 512)
+        fd.seek(2048)
+        self.assertEquals(fd.read(512), 'E' * 512)
+        fd.close()
