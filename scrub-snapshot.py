@@ -2,6 +2,7 @@
 
 import os
 import sys
+import directio
 from struct import unpack_from
 from optparse import OptionParser
 from subprocess import check_output, call, CalledProcessError
@@ -19,22 +20,21 @@ def run(cmd, verbose=False):
 
 
 def write(fd, offset, buf):
+    # Seek to the offset
+    if fd.seek(offset, os.SEEK_SET) == -1:
+        raise ScrubError("Unable to seek to offset '%d'" % offset)
     try:
-        # Seek to the offset
-        if os.lseek(fd, offset, os.SEEK_SET) == -1:
-            raise ScrubError("Unable to seek to offset '%d'" % offset)
-        if os.write(fd, buf) == -1:
-            raise ScrubError("Failed to scrub chunk at offset '%d'" % offset)
+        return fd.write(buf)
     except (OSError, IOError), e:
-        raise ScrubError("Write Failed with: %s" % e)
+        raise ScrubError("Failed to scrub chunk at offset '%d'" % offset)
 
 
 def read(fd, offset, length):
+    # Seek to the offset
+    if fd.seek(offset, os.SEEK_SET) == -1:
+        raise ScrubError("Unable to seek to offset '%d'" % offset)
     try:
-        # Seek to the offset
-        if os.lseek(fd, offset, os.SEEK_SET) == -1:
-            raise ScrubError("Unable to seek to offset '%d'" % offset)
-        return os.read(fd, length)
+        return fd.read(length)
     except (OSError, IOError), e:
         raise ScrubError("Read Failed with: %s" % e)
 
@@ -94,7 +94,7 @@ def scrub(cow, options):
         if options.verbose:
             print "-- Opening Cow '%s'" % cow
         # Open the cow block device
-        fd = os.open(cow, os.O_RDWR)
+        fd = directio.open(cow, buffered=4096)
     except OSError, e:
         raise ScrubError("Failed to open cow '%s'" % e)
 
@@ -118,7 +118,7 @@ def scrub(cow, options):
             if offset == 0:
                 if options.display_only:
                     print "-- Counted '%d' exceptions in the cow" % count
-                return os.close(fd)
+                return fd.close()
             if options.verbose == 2:
                 print "--- Exception ---"
                 print read(fd, offset, header[3])
@@ -146,7 +146,8 @@ def prepare_cow(cow, verbose):
 
     try:
         # create a new handle to the same blocks as in use by the cow
-        run("echo '%s' | dmsetup create %s" % (cow_table, cow + '-zero'), verbose)
+        run("echo '%s' | dmsetup create %s" %
+                (cow_table, cow + '-zero'), verbose)
 
         # suspend the cow (this will essentially suspend the origin)
         run("dmsetup suspend %s" % cow, verbose)
