@@ -20,18 +20,11 @@ def buffered(offset, count):
 
 def direct_io(offset, count):
     total = 0
-    with directio.open(sys.argv[1], buffered=4096) as fd:
+    with directio.open(sys.argv[1], buffered=32768) as fd:
         fd.seek(offset)
         for i in xrange(0, count):
             total = total + os.write(sys.stdout.fileno(), fd.read(4096))
     return total
-    #for i in xrange(0, count):
-    #    input = file.pread(4096, offset)
-    #    total = total + os.write(sys.stdout.fileno(), input)
-#
-#    # Close the file
-#    file.close()
-#    return total
 
 
 def mmap_read(offset, count):

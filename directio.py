@@ -12,8 +12,9 @@ libc = CDLL(util.find_library('c'), use_errno=True)
 
 def open(path, mode='+', buffered=-1):
     if buffered == -1:
-        # Default to the os page size (usually 4k)
-        buffered = resource.getpagesize()
+        # This size appears on par with kernel buffer sizes
+        # and performance is about the same
+        buffered = 32768
 
     if 'r' in mode:
         raw = RawDirect(path, mode=os.O_RDONLY)
@@ -116,10 +117,9 @@ class RawDirect(io.RawIOBase):
         return os.close(self._fd)
 
     def readall(self):
-        length = resource.getpagesize()
         result = []
         while True:
-            buf = self.read(length)
+            buf = self.read(32768)
             if len(buf) == 0:
                 break
             result.append(buf)

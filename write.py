@@ -45,7 +45,7 @@ def mmap_write(data):
 
 
 def direct_io(data):
-    with directio.open(sys.argv[1], buffered=4096) as fd:
+    with directio.open(sys.argv[1], buffered=32768) as fd:
         total = 0
         for i in xrange(0, count):
             total = total + fd.write(data)
