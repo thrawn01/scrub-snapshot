@@ -34,7 +34,7 @@ def direct_io(offset, count):
 #    return total
 
 
-def direct_map(offset, count):
+def mmap_read(offset, count):
     # Open the file for direct access
     fd = os.open(sys.argv[1], os.O_DIRECT | os.O_RDWR)
 
@@ -62,16 +62,16 @@ if __name__ == "__main__":
     count = int(sys.argv[3])
     print "Offset: ", offset
 
-    if len(sys.argv) == 5 and sys.argv[4] == 'direct_map':
-        os.write(sys.stdout.fileno(), "\n(Direct Map) Read: %d\n"
-                % direct_map(offset, count))
+    if len(sys.argv) == 5 and sys.argv[4] == 'mmap':
+        os.write(sys.stdout.fileno(), "\n(mmap) Read: %d\n"
+                % mmap_read(offset, count))
         sys.exit(0)
 
-    if len(sys.argv) == 5 and sys.argv[4] == 'direct_io':
-        os.write(sys.stdout.fileno(), "\n(Direct) Read: %d\n"
-                % direct_io(offset, count))
+    if len(sys.argv) == 5 and sys.argv[4] == 'buffered':
+        os.write(sys.stdout.fileno(), "\n(Buffered) Read: %d\n"
+                    % buffered(offset, count))
         sys.exit(0)
 
-    os.write(sys.stdout.fileno(), "\n(Buffered) Read: %d\n"
-                % buffered(offset, count))
+    os.write(sys.stdout.fileno(), "\n(Direct) Read: %d\n"
+            % direct_io(offset, count))
     sys.exit(0)

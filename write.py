@@ -17,7 +17,7 @@ def buffered(data):
     return total
 
 
-def direct(data):
+def mmap_write(data):
     # system call write() when used with O_DIRECT requires
     # the buffer passed to be 512 byte aligned in length
     # Attempting to write 'data' string directly will result in
@@ -64,12 +64,12 @@ if __name__ == "__main__":
     data = "".join([chr(int(value)) for i in xrange(0, 4096)])
 
     print "Writing: '%c'" % data[0]
-    if len(sys.argv) == 5 and sys.argv[4] == 'directio':
-        print "(DirectIO) Wrote: ", direct_io(data)
+    if len(sys.argv) == 5 and sys.argv[4] == 'buffered':
+        print "(Buffered) Wrote: ", buffered(data)
         sys.exit(0)
-    if len(sys.argv) == 5 and sys.argv[4] == 'direct':
-        print "(Direct) Wrote: ", direct(data)
+    if len(sys.argv) == 5 and sys.argv[4] == 'mmap':
+        print "(mmap) Wrote: ", mmap_write(data)
         sys.exit(0)
 
-    print "(Buffered) Wrote: ", buffered(data)
+    print "(Direct) Wrote: ", direct_io(data)
     sys.exit(0)
