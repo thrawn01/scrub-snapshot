@@ -3,18 +3,20 @@
 import os
 import sys
 import directio
+import logging
 from struct import unpack_from
 from optparse import OptionParser
 from subprocess import check_output, call, CalledProcessError
 
+logging.basicConfig(format='-- %(message)s')
+log = logging.getLogger('scrub-snapshot')
 
 class ScrubError(RuntimeError):
     pass
 
 
-def run(cmd, verbose=False):
-    if verbose:
-        print "-- %s" % cmd
+def run(cmd):
+    log.info(cmd)
     if call(cmd, shell=True):
         raise ScrubError("Command '%s' returned non-zero exit status" % cmd)
 
@@ -59,7 +61,7 @@ def read_exception_metadata(fd, chunk_size, index):
         exception = exception + 1
 
 
-def read_header(fd):
+def read_header(fd, options):
     SECTOR_SHIFT = 9
     SNAPSHOT_DISK_MAGIC = 0x70416e53
     SNAPSHOT_DISK_VERSION = 1
@@ -69,71 +71,65 @@ def read_header(fd):
     header = unpack_from("<IIII", read(fd, 0, 16))
 
     if header[0] != SNAPSHOT_DISK_MAGIC:
-        print "-- Invalid COW device '%s'; header magic doesn't match" % cow
-        return 1
+        raise ScrubError(
+            "Invalid COW device '%s'; header magic doesn't match" % cow)
 
     if header[1] != SNAPSHOT_VALID_FLAG:
-        print "-- Invalid COW device '%s'; valid flag not set '%d' got '%d'"\
-            % (cow, SNAPSHOT_VALID_FLAG, header[1])
-        return 1
+        raise ScrubError(
+            "Invalid COW device '%s'; valid flag not set '%d' got '%d'"\
+                % (cow, SNAPSHOT_VALID_FLAG, header[1]))
 
     if header[2] != SNAPSHOT_DISK_VERSION:
-        print "-- Unknown metadata version '%s'; expected '%d' got '%d' "\
-            % (cow, SNAPSHOT_DISK_VERSION, header[2])
-        return 1
+        raise ScrubError(
+            "Unknown metadata version '%s'; expected '%d' got '%d' "\
+                % (cow, SNAPSHOT_DISK_VERSION, header[2]))
+
+    log.info("Magic: %X" % header[0])
+    log.info("Valid: %d" % header[1])
+    log.info("Version: %d" % header[2])
+    log.info("Chunk Size: %d" % header[3])
 
     header = list(header)
     # Chunk size is byte aligned to 512 bytes
     # (0 << SECTOR_SHIFT) == 512
-    header[3] = header[3] << SECTOR_SHIFT
-    return header
+    return header[3] << SECTOR_SHIFT
 
 
 def scrub(cow, options):
     try:
-        if options.verbose:
-            print "-- Opening Cow '%s'" % cow
+        log.info("Opening Cow '%s'" % cow)
         # Open the cow block device
-        fd = directio.open(cow, buffered=4096)
+        fd = directio.open(cow, buffered=32768)
     except OSError, e:
         raise ScrubError("Failed to open cow '%s'" % e)
 
     # Read the meta data header
-    header = read_header(fd)
-
-    if options.verbose:
-        print "-- Magic: %X" % header[0]
-        print "-- Valid: %d" % header[1]
-        print "-- Version: %d" % header[2]
-        print "-- Chunk Size: %d" % header[3]
+    chunk_size = read_header(fd, options)
 
     # Create a buffer of nulls the size of the chunk
-    scrub_buf = '\0' * header[3]
+    scrub_buf = '\0' * chunk_size
 
     store, count = (0, 0)
     while True:
         # Iterate through all the exceptions
-        for offset in read_exception_metadata(fd, header[3], store):
+        for offset in read_exception_metadata(fd, chunk_size, store):
             # zero means we reached the last exception
             if offset == 0:
                 if options.display_only:
-                    print "-- Counted '%d' exceptions in the cow" % count
+                    log.info("Counted '%d' exceptions in the cow" % count)
                 return fd.close()
-            if options.verbose == 2:
-                print "--- Exception ---"
-                print read(fd, offset, header[3])
-                print "-----------------"
+            if options.verbose > 1:
+                log.debug("Exception: %s", read(fd, offset, chunk_size))
             count = count + 1
             if not options.display_only:
-                if options.verbose:
-                    print "-- Scrubing exception at %d" % offset
+                log.info("Scrubing exception at %d" % offset)
                 # Write a chunk full of NULL's at 'offset'
                 write(fd, offset, scrub_buf)
         # Seek the next store
         store = store + 1
 
 
-def prepare_cow(cow, verbose):
+def prepare_cow(cow):
     # Don't attempt to re-create a -zero linear device if it already exists
     if os.path.exists(cow + '-zero'):
         return
@@ -147,23 +143,23 @@ def prepare_cow(cow, verbose):
     try:
         # create a new handle to the same blocks as in use by the cow
         run("echo '%s' | dmsetup create %s" %
-                (cow_table, cow + '-zero'), verbose)
+                (cow_table, cow + '-zero'))
 
         # suspend the cow (this will essentially suspend the origin)
-        run("dmsetup suspend %s" % cow, verbose)
+        run("dmsetup suspend %s" % cow)
 
         # update the table for the cow device to always return io errors
         # e.g. "0 204800 linear 8:16 4194688" => "0 204800 error"
         parts = cow_table.split()
         error_table = "%s %s %s" % (parts[0], parts[1], 'error')
-        run("echo '%s' | dmsetup reload %s" % (error_table, cow), verbose)
+        run("echo '%s' | dmsetup reload %s" % (error_table, cow))
     except ScrubError, e:
         # If somthing went wrong, remove the cow-zero volume
-        run("dmsetup remove %s" % (cow + '-zero'), verbose)
+        run("dmsetup remove %s" % (cow + '-zero'))
         raise
     finally:
         # resume the cow to let writes start happening back on the origin
-        run("dmsetup resume %s" % cow, verbose)
+        run("dmsetup resume %s" % cow)
 
 
 def remove_snapshot(snapshot, options):
@@ -177,7 +173,7 @@ def remove_snapshot(snapshot, options):
 
     # The -zero device might already exist if recovering from a botched scrub
     if not options.display_only:
-        prepare_cow(cow_device, options.verbose)
+        prepare_cow(cow_device)
 
     if os.path.exists(cow + '-zero'):
         cow = cow + '-zero'
@@ -185,13 +181,17 @@ def remove_snapshot(snapshot, options):
     # scrub the cow
     scrub(cow, options)
 
-    if not options.display_only or options.skip_remove:
-        print "-- Removing snapshot '%s'" % snapshot
-        # Remove the cow-zero
-        run("dmsetup remove -f %s" % cow_device + '-zero', options.verbose)
-        # Remove the snapshot
-        run("lvremove %s -ff" % snapshot, options.verbose)
+    if options.skip_remove:
+        log.info("skip-remove requested, not removing '%s-zero'"
+                % cow_device)
+        return
 
+    if not options.display_only:
+        log.info("Removing snapshot '%s'" % snapshot)
+        # Remove the cow-zero
+        run("dmsetup remove -f %s" % cow_device + '-zero')
+        # Remove the snapshot
+        run("lvremove %s -ff" % snapshot)
 
 if __name__ == "__main__":
     description = "Scrub the COW of an lvm snapshot then delete the snapshot"
@@ -209,10 +209,15 @@ if __name__ == "__main__":
         parser.print_help()
         sys.exit(1)
 
+    if options.verbose == 1:
+        log.setLevel(logging.INFO)
+    if options.verbose > 1:
+        log.setLevel(logging.DEBUG)
+
     if options.display_only:
-        print "-- Display Only, Not Scrubbing"
         if options.verbose < 2:
-            options.verbose = 1
+            log.setLevel(logging.INFO)
+        log.info("Display Only, Not Scrubbing")
 
     try:
         sys.exit(remove_snapshot(args[0], options))
