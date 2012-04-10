@@ -43,7 +43,7 @@ class TestRawDirect(unittest.TestCase):
         with open(self.file, 'w') as file:
             file.write('B' * 512)
 
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         self.assertEquals(raw.read(512), 'B' * 512)
         raw.close()
 
@@ -53,7 +53,7 @@ class TestRawDirect(unittest.TestCase):
         os.write(fd, 'A' * 511)
         os.close(fd)
 
-        raw = RawDirect(file, block_size=512)
+        raw = RawDirect(file)
         # If requested read is past the EOF
         # return the bytes we actually read
         self.assertEquals(raw.read(512), ('A' * 511))
@@ -61,12 +61,12 @@ class TestRawDirect(unittest.TestCase):
         self.assertEquals(raw.read(512), '')
         raw.close()
 
-    def test_read_less_than_block_size(self):
+    def test_read_less_than_page_size(self):
         with open(self.file, 'w') as file:
             file.write('F' * 512)
             file.write('B' * 1024)
 
-        raw = RawDirect(self.file, block_size=4096)
+        raw = RawDirect(self.file)
         # Ask to only read 10 bytes
         self.assertRaises(OSError, raw.read, 10)
         # Read 512 bytes
@@ -75,17 +75,19 @@ class TestRawDirect(unittest.TestCase):
         self.assertEquals(raw.read(1024), 'B' * 1024)
         raw.close()
 
-    def test_read_greater_than_block_size(self):
+    def test_read_greater_than_page_size(self):
         with open(self.file, 'w') as file:
-            file.write('J' * 520)
+            file.write('J' * 8192)
 
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         # Ask to read 8 more bytes then the block size
         self.assertRaises(OSError, raw.read, 520)
+        # Read 8192 ( double the typical page size )
+        self.assertEquals(raw.read(8192), 'J' * 8192)
         raw.close()
 
     def test_readall(self):
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         # Read in the entire 1MB file
         buf = raw.readall()
         self.assertEquals(len(buf), 1048576)
@@ -95,14 +97,14 @@ class TestRawDirect(unittest.TestCase):
         with open(self.file, 'w') as file:
             file.write('A' * 512)
 
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         buf = bytearray(512)
         self.assertEquals(raw.readinto(buf), 512)
         self.assertEquals(buf, 'A' * 512)
         raw.close()
 
     def test_write(self):
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         raw.write('A' * 512)
         raw.close()
 
@@ -121,7 +123,7 @@ class TestRawDirect(unittest.TestCase):
             device = find_loopback_device()
             call("losetup %s %s" % (device, file), shell=True)
 
-            raw = RawDirect(device, block_size=512)
+            raw = RawDirect(device)
             # Should raise IOError: [Errno 28] No space left on device
             self.assertRaises(OSError, raw.write, 'A' * 512)
             self.assertEquals(raw.tell(), 0)
@@ -138,7 +140,7 @@ class TestRawDirect(unittest.TestCase):
         # Should be 511 in size
         self.assertEquals(os.stat(file).st_size, 511)
 
-        raw = RawDirect(file, block_size=512)
+        raw = RawDirect(file)
         # the write should succeed
         self.assertEquals(raw.write('A' * 512), 512)
         raw.close()
@@ -146,8 +148,8 @@ class TestRawDirect(unittest.TestCase):
         # writting past the end should grow the size of the file
         self.assertEquals(os.stat(file).st_size, 512)
 
-    def test_write_less_than_block_size(self):
-        raw = RawDirect(self.file, block_size=4096)
+    def test_write_less_than_page_size(self):
+        raw = RawDirect(self.file)
         # Write only 10 bytes
         self.assertRaises(OSError, raw.write, ('G' * 10))
         # Write 512
@@ -160,14 +162,14 @@ class TestRawDirect(unittest.TestCase):
         self.assertEquals(raw.read(1024), 'B' * 1024)
         raw.close()
 
-    def test_write_greater_than_block_size(self):
-        raw = RawDirect(self.file, block_size=512)
+    def test_write_greater_than_page_size(self):
+        raw = RawDirect(self.file)
         # Write only 8 bytes more than the block size
         self.assertRaises(OSError, raw.write, ('J' * 520))
         raw.close()
 
     def test_closed(self):
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         self.assertEquals(raw.closed, False)
         self.assertEquals(raw.writable(), True)
         raw.close()
@@ -178,19 +180,19 @@ class TestRawDirect(unittest.TestCase):
         # Our test file should be 1MB
         self.assertEquals(os.stat(self.file).st_size, 1048576)
 
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         raw.truncate(512)
         raw.close()
         self.assertEquals(os.stat(self.file).st_size, 512)
 
     def test_seek(self):
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         self.assertEquals(raw.seek(4096, os.SEEK_SET), 4096)
         self.assertEquals(raw.seek(-512, os.SEEK_CUR), 3584)
         # TODO: Test SEEK_END
 
     def test_tell(self):
-        raw = RawDirect(self.file, block_size=512)
+        raw = RawDirect(self.file)
         raw.write('A' * 512)
         self.assertEquals(raw.tell(), 512)
         raw.write('B' * 512)

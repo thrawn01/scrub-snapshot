@@ -11,27 +11,26 @@ libc = CDLL(util.find_library('c'), use_errno=True)
 
 
 def open(path, mode='+', buffered=-1):
+    if buffered == -1:
+        # Default to the os page size (usually 4k)
+        buffered = resource.getpagesize()
 
     if 'r' in mode:
-        raw = RawDirect(path, mode=os.O_RDONLY, block_size=buffered)
-        return io.BufferedReader(raw, buffer_size=raw.block_size)
+        raw = RawDirect(path, mode=os.O_RDONLY)
+        return io.BufferedReader(raw, buffer_size=buffered)
     if 'w' in mode or 'a' in mode:
-        raw = RawDirect(path, mode=os.O_WRONLY, block_size=buffered)
-        return io.BufferedWriter(raw, buffer_size=raw.block_size)
+        raw = RawDirect(path, mode=os.O_WRONLY)
+        return io.BufferedWriter(raw, buffer_size=buffered)
     if '+' in mode:
-        raw = RawDirect(path, block_size=buffered)
-        return io.BufferedRandom(raw, buffer_size=raw.block_size)
+        raw = RawDirect(path)
+        return io.BufferedRandom(raw, buffer_size=buffered)
     raise ValueError("unknown mode: '%s'", mode)
 
 
 class RawDirect(io.RawIOBase):
 
-    def __init__(self, path, mode=os.O_RDWR, block_size=None):
+    def __init__(self, path, mode=os.O_RDWR):
         self._fd = os.open(path, os.O_DIRECT | mode)
-        # Use the system default page size if none is specified
-        self._block_size = resource.getpagesize()
-        if block_size > 0:
-            self._block_size = block_size
         self._closed = False
         # There is currently no file system-independent interface
         # for an application to discover the byte alignment restrictions
@@ -48,26 +47,15 @@ class RawDirect(io.RawIOBase):
         self._cwrite = libc.write
         self._cwrite.argtypes = [c_int, c_void_p, c_size_t]
         self._cwrite.errcheck = self.error_check
-
-        # NOT thread safe, DO NOT USE RawDirect as a singleton!
-        # IE: Don't replace sys.stdout with it!
-        self._buf = c_void_p()
-        self._memalign(byref(self._buf),
-                self._byte_alignment, self._block_size)
+        self._cfree = libc.free
+        self._cfree.argtypes = [c_void_p]
+        self._cfree.errcheck = self.error_check
 
     def _get_closed(self):
         return self._closed
+
     closed = property(_get_closed, None, None,
             "Returns True if the file handle is closed")
-
-    def _get_block_size(self):
-        return self._block_size
-
-    def _set_block_size(self, size):
-        self._block_size = size
-
-    block_size = property(_get_block_size, _set_block_size, None,
-            "Set/Get the blocksize used when writing to the block device")
 
     def error_check(self, result, func, args):
         if result < 0:
@@ -80,33 +68,47 @@ class RawDirect(io.RawIOBase):
             buf = buf.tobytes()
 
         length = len(buf)
-        if length <= self._block_size:
-            block, remainder = divmod(length, self._byte_alignment)
-            # As long as the buf size is a multiple of the byte alignment
-            if remainder == 0:
-                # Write out the buffer
-                memmove(self._buf, c_char_p(buf), length)
-                return self._cwrite(self._fd, self._buf, length)
+        block, remainder = divmod(length, self._byte_alignment)
+        # As long as the buf size is a multiple of the byte alignment
+        if remainder == 0:
+            # Allocate the a mem aligned c buffer
+            c_buf = c_void_p()
+            self._memalign(byref(c_buf), self._byte_alignment, length)
+            # Copy the bytes into the c_buf
+            memmove(c_buf, c_char_p(buf), length)
+            # Write out the buffer
+            write_len = self._cwrite(self._fd, c_buf, length)
+            self._cfree(c_buf)
+            return write_len
 
-        raise OSError(22, "Refusing to write buffer of length %d"\
-                "; length must less than blocksize %d and a multiple of %d"
-                    % (length, self._block_size, self._byte_alignment))
+        raise OSError(22, "Refusing to write a buffer of length %d"\
+                "; length must be a multiple of %d" % (length,
+                    self._byte_alignment))
 
     def read(self, length=None):
         # If length is -1 or None, call self.readall()
         if length == -1 or length == None:
             return self.readall()
 
-        if length <= self._block_size:
-            block, remainder = divmod(length, self._byte_alignment)
-            # As long as the length is a multiple of the byte alignment
-            if remainder == 0:
-                length = self._cread(self._fd, self._buf, length)
-                return string_at(self._buf, length)
+        return self._read(length)[1]
+
+    def _read(self, length):
+        block, remainder = divmod(length, self._byte_alignment)
+        # As long as the length is a multiple of the byte alignment
+        if remainder == 0:
+            # Allocate the a mem aligned c buffer
+            c_buf = c_void_p()
+            self._memalign(byref(c_buf), self._byte_alignment, length)
+            length = self._cread(self._fd, c_buf, length)
+            # Copy the contents of the c_buf
+            string = string_at(c_buf, length)
+            # Free the c_buf and return the read value
+            self._cfree(c_buf)
+            return (length, string)
 
         raise OSError(22, "Refusing to read buffer of length %d"\
-                "; length must less than blocksize %d and a multiple of %d"
-                    % (length, self._block_size, self._byte_alignment))
+                "; length must be a multiple of %d" % (length,
+                    self._byte_alignment))
 
     def close(self):
         # TODO: Free the memalign buffer (self._buf)
@@ -114,26 +116,19 @@ class RawDirect(io.RawIOBase):
         return os.close(self._fd)
 
     def readall(self):
+        length = resource.getpagesize()
         result = []
         while True:
-            buf = self.read(self._block_size)
+            buf = self.read(length)
             if len(buf) == 0:
                 break
             result.append(buf)
         return ''.join(result)
 
     def readinto(self, buf):
-        length = len(buf)
-        if length <= self._block_size:
-            block, remainder = divmod(length, self._byte_alignment)
-            # As long as the length is a multiple of the byte alignment
-            if remainder == 0:
-                length = self._cread(self._fd, self._buf, self._block_size)
-                buf[0:len(buf)] = string_at(self._buf, length)
-                return length
-        raise OSError(22, "Refusing to read into buffer of length %d"\
-                "; length must less than blocksize %d and a multiple of %d"
-                    % (length, self._block_size, self._byte_alignment))
+        length, string = self._read(len(buf))
+        buf[0:len(buf)] = string
+        return length
 
     def fileno(self):
         return self._fd
