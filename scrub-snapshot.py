@@ -72,17 +72,17 @@ def read_header(fd, options):
 
     if header[0] != SNAPSHOT_DISK_MAGIC:
         raise ScrubError(
-            "Invalid COW device '%s'; header magic doesn't match" % cow)
+            "Invalid COW device; header magic doesn't match")
 
     if header[1] != SNAPSHOT_VALID_FLAG:
-        raise ScrubError(
-            "Invalid COW device '%s'; valid flag not set '%d' got '%d'"\
-                % (cow, SNAPSHOT_VALID_FLAG, header[1]))
+        log.warning(
+            "Inactive COW device; valid flag not set '%d' got '%d'"\
+                % (SNAPSHOT_VALID_FLAG, header[1]))
 
     if header[2] != SNAPSHOT_DISK_VERSION:
         raise ScrubError(
-            "Unknown metadata version '%s'; expected '%d' got '%d' "\
-                % (cow, SNAPSHOT_DISK_VERSION, header[2]))
+            "Unknown metadata version; expected '%d' got '%d' "\
+                % (SNAPSHOT_DISK_VERSION, header[2]))
 
     log.info("Magic: %X" % header[0])
     log.info("Valid: %d" % header[1])
@@ -129,10 +129,13 @@ def scrub(cow, options):
         store = store + 1
 
 
-def prepare_cow(cow):
+def prepare_cow(cow, cow_path):
     # Don't attempt to re-create a -zero linear device if it already exists
-    if os.path.exists(cow + '-zero'):
+    if os.path.exists(cow_path + '-zero'):
         return
+    if not os.path.exists(cow_path):
+        raise ScrubError(
+            "Cow '%s' does not exist; invalid snapshot volume?" % cow_path)
 
     try:
         # copy the cow device linear table mapping
@@ -173,7 +176,7 @@ def remove_snapshot(snapshot, options):
 
     # The -zero device might already exist if recovering from a botched scrub
     if not options.display_only:
-        prepare_cow(cow_device)
+        prepare_cow(cow_device, cow)
 
     if os.path.exists(cow + '-zero'):
         cow = cow + '-zero'
