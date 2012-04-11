@@ -11,6 +11,7 @@ from subprocess import check_output, call, CalledProcessError
 logging.basicConfig(format='-- %(message)s')
 log = logging.getLogger('scrub-snapshot')
 
+
 class ScrubError(RuntimeError):
     pass
 
@@ -47,6 +48,8 @@ def read_exception_metadata(fd, chunk_size, index):
     # exceptions_per_chunk is how many exceptions can fit in one chunk
     exceptions_per_chunk = chunk_size / 16
     # Offset where the exception metadata store begins
+    # 1 + for the header chunk, then + 1 to take into
+    # account the exception metadata chunk
     store_offset = 1 + ((exceptions_per_chunk + 1) * index)
     # seek to the begining of the exception metadata store
     # and read the entire store
